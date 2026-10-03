@@ -1,34 +1,27 @@
 import { authMiddleware } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
-import { routeAccessMap } from "./lib/settings";
 
 export default authMiddleware({
-  publicRoutes: ["/"],
+  // Make everything public except what you explicitly want to lock down, 
+  // or explicitly whitelist your sign-in, sign-up, and root pages.
+  publicRoutes: ["/", "/sign-in(.*)", "/sign-up(.*)"],
+  
   afterAuth(auth, req) {
-    const { userId, sessionClaims } = auth;
-    const role = (sessionClaims?.metadata as { role?: string })?.role;
+    const { userId } = auth;
+    const currentPath = req.nextUrl.pathname;
 
-    console.log("Current route:", req.nextUrl.pathname);
-    console.log("User role:", role);
+    console.log("Middleware Path:", currentPath, "User:", userId);
 
-    // Check if the current route is in the routeAccessMap
-    for (const [route, allowedRoles] of Object.entries(routeAccessMap)) {
-      if (new RegExp(`^${route}$`).test(req.nextUrl.pathname)) {
-        console.log("Matching route:", route);
-        console.log("Allowed roles:", allowedRoles);
-        
-        if (!allowedRoles.includes(role as string)) {
-          console.log("Access denied, redirecting to dashboard");
-          return NextResponse.redirect(new URL("/", req.url));
-        }
-      }
+    // If the user is signed in and hits the sign-in page, push them to the admin dashboard
+    if (userId && currentPath.startsWith("/sign-in")) {
+      return NextResponse.redirect(new URL("/dashboard/admin", req.url));
     }
 
-    // If we get here, allow the request to proceed
+    // Allow all other requests to proceed normally without token-flicker redirects
     return NextResponse.next();
   },
 });
 
 export const config = {
-  matcher: ["/((?!.+\\.[\\w]+$|_next).*)", "/", "/(api|trpc)(.*)"],
+  matcher: ['/((?!.+\\.[\\w]+$|_next|favicon.ico).*)', '/', '/(api|trpc)(.*)'],
 };
